@@ -1,0 +1,24 @@
+# LaTeX build files
+*.aux
+*.bcf
+*.log
+*.out
+*.run.xml
+*.bbl
+*.blg
+*.toc
+*.lof
+*.lot
+*.fls
+*.fdb_latexmk
+*.synctex.gz
+
+# Build artifacts
+skeleton_project/build/
+skeleton_project/elevator
+
+# Editor files
+*.swp
+*.swo
+*~
+.vscode/
