@@ -1,7 +1,7 @@
 /*
 +--------------------------------- +
 |  >>Date                          |
-|    04.02.26                      |.
+|    27.02.26                      |.
 |  >>git pulled by                 |.
 |    Gabriel Sebastian Steeneveldt |.
 +--------------------------------- _____
@@ -30,13 +30,10 @@ typedef struct {
 
 extern fsm_t fsm;
 
-// FSM functions
 void fsm_init(void);
 void fsm_run(fsm_events_t event);
 void fsm_transition(state_fp new_state);
 
-
-// State functions
 void state_init(fsm_events_t event);
 void state_idle(fsm_events_t event);
 void state_moving(fsm_events_t event);
