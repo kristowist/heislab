@@ -1,0 +1,150 @@
+@startuml class_diagram
+title Heislab - Oversiktsdiagram
+
+skinparam classAttributeIconSize 0
+skinparam classFontSize 13
+skinparam packageFontSize 14
+skinparam ArrowFontSize 11
+skinparam linetype ortho
+
+' ─── ENUMS ───────────────────────────────────────────
+enum MotorDirection {
+    DIRN_DOWN  = -1
+    DIRN_STOP  =  0
+    DIRN_UP    =  1
+}
+
+enum ButtonType {
+    BUTTON_HALL_UP   = 0
+    BUTTON_HALL_DOWN = 1
+    BUTTON_CAB       = 2
+}
+
+enum fsm_events_t {
+    EVENT_TICK
+    EVENT_ENTRY
+    EVENT_EXIT
+    EVENT_ERROR
+}
+
+' ─── MAIN ────────────────────────────────────────────
+class main {
+    + main() : int
+    --
+    Initialiserer systemet.
+    Kjører hovedløkken (10ms tick).
+    Kaller orders_poll() og fsm_run().
+}
+
+' ─── FSM ─────────────────────────────────────────────
+class FSM {
+    - current_floor : int
+    - current_direction : MotorDirection
+    - state : state_fp
+    --
+    + fsm_init()
+    + fsm_run(event : fsm_events_t)
+    + fsm_transition(new_state : state_fp)
+    --
+    + state_init(event)
+    + state_idle(event)
+    + state_moving(event)
+    + state_door_open(event)
+    + state_stop(event)
+    + state_error(event)
+    --
+    Styrer heisens oppførsel via\ntilstandsmaskinen. Bestemmer\nnår motoren skal kjøre,\nnår døren åpnes, og\nhåndterer nødstans.
+}
+
+note right of FSM
+  **Tilstander:**
+  init → idle ↔ moving
+           ↕        ↕
+       door_open ←┘
+       stop (fra alle)
+       error (fra alle)
+end note
+
+' ─── ORDERS ──────────────────────────────────────────
+class Orders {
+    - orders[N_FLOORS][N_BUTTONS] : int
+    - orders_blocked : int
+    --
+    + orders_init()
+    + orders_set_blocked(blocked : int)
+    + orders_add(floor, button)
+    + orders_clear_at_floor(floor)
+    + orders_clear_all()
+    + orders_has_order_at(floor) : bool
+    + orders_any() : bool
+    + orders_above(floor) : bool
+    + orders_below(floor) : bool
+    + orders_should_stop(floor, dir) : bool
+    + orders_choose_direction(floor, dir) : MotorDirection
+    + orders_poll()
+    --
+    Holder styr på alle\nknapptrykk (4 etasjer × 3\nknapptyper). Bestemmer\nhvor heisen skal stoppe\nog hvilken retning den\nskal kjøre.
+}
+
+' ─── TIMER ───────────────────────────────────────────
+class Timer {
+    - start_time : time_t
+    --
+    + timer_start()
+    + timer_expired() : int
+    --
+    Måler 3 sekunders\ndøråpningstid.
+}
+
+note bottom of Timer
+  DOOR_OPEN_DURATION = 3s
+end note
+
+' ─── ELEVIO ──────────────────────────────────────────
+class Elevio {
+    - sockfd : int
+    - mutex : pthread_mutex_t
+    --
+    + elevio_init()
+    ..Utganger (kommandoer)..
+    + elevio_motorDirection(dir : MotorDirection)
+    + elevio_buttonLamp(floor, button, value)
+    + elevio_floorIndicator(floor)
+    + elevio_doorOpenLamp(value)
+    + elevio_stopLamp(value)
+    ..Innganger (sensorer)..
+    + elevio_callButton(floor, button) : int
+    + elevio_floorSensor() : int
+    + elevio_stopButton() : int
+    + elevio_obstruction() : int
+    --
+    Hardwareabstraksjonslag.\nKommuniserer med simulator\nvia TCP på localhost:15657\nmed 4-byte meldingsprotokoll.
+}
+
+' ─── SIMULATOR ───────────────────────────────────────
+class Simulator <<external>> {
+    localhost:15657
+    --
+    Emulerer heishardware:\nmotor, sensorer, knapper,\nlamper og hindring.
+}
+
+' ─── RELASJONER ──────────────────────────────────────
+main --> FSM       : fsm_init()\nfsm_run(EVENT_TICK)
+main --> Orders    : orders_init()\norders_poll()
+
+FSM --> Orders     : orders_any()\norders_should_stop()\norders_choose_direction()\norders_clear_at_floor()\norders_clear_all()\norders_set_blocked()
+FSM --> Timer      : timer_start()\ntimer_expired()
+FSM --> Elevio     : motorDirection()\ndoorOpenLamp()\nstopLamp()\nfloorIndicator()\nfloorSensor()
+
+Orders --> Elevio  : callButton()\nbuttonLamp()
+
+Elevio --> Simulator : TCP 4-byte\nmeldingsprotokoll
+
+FSM ..> MotorDirection
+FSM ..> fsm_events_t
+Orders ..> ButtonType
+Orders ..> MotorDirection
+Elevio ..> MotorDirection
+Elevio ..> ButtonType
+
+@enduml

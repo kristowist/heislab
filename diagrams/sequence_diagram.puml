@@ -1,0 +1,181 @@
+@startuml sequence_diagram
+title Heislab - Sekvensdiagram\nEksempel: Heis i etasje 2, bestilling fra etasje 1, deretter etasje 4
+
+participant "main" as MAIN
+participant "orders" as ORD
+participant "fsm" as FSM
+participant "timer" as TMR
+participant "elevio (HAL)" as HW
+participant "Simulator" as SIM
+
+== Initialisering ==
+
+MAIN -> HW : elevio_init()
+HW -> SIM : TCP connect (localhost:15657)
+SIM --> HW : Connected
+HW --> MAIN : OK
+
+MAIN -> ORD : orders_init()
+note right of ORD : Nullstill ordretabell\n[4 etasjer × 3 knapptyper]
+
+MAIN -> FSM : fsm_init()
+FSM -> HW : elevio_floorSensor()
+HW -> SIM : [7, 0, 0, 0]
+SIM --> HW : [0, 1, 2, 0]
+HW --> FSM : floor = 2
+FSM -> FSM : Sett current_floor = 2
+FSM -> FSM : Overgang → state_idle [EVENT_ENTRY]
+FSM -> HW : elevio_motorDirection(DIRN_STOP)
+HW -> SIM : [1, 0, 0, 0]
+
+== Hovedløkke: Ledig ==
+
+loop Hvert 10ms
+    MAIN -> ORD : orders_poll()
+    ORD -> HW : elevio_callButton(alle knapper)
+    HW -> SIM : [6, knapp, etasje, 0]
+    SIM --> HW : [0, 0/1, 0, 0]
+    HW --> ORD : Knapptilstand
+
+    MAIN -> FSM : fsm_run(EVENT_TICK)
+    FSM -> ORD : orders_any()
+    ORD --> FSM : false (ingen ordre ennå)
+end
+
+== Passasjer trykker knapp i etasje 1 (hall opp) ==
+
+MAIN -> ORD : orders_poll()
+ORD -> HW : elevio_callButton(HALL_UP, etasje 1)
+HW -> SIM : [6, 0, 1, 0]
+SIM --> HW : [0, 1, 0, 0]
+HW --> ORD : pressed = true
+ORD -> ORD : orders_add(1, BUTTON_HALL_UP)
+ORD -> HW : elevio_buttonLamp(1, HALL_UP, ON)
+HW -> SIM : [2, 0, 1, 1]
+
+MAIN -> FSM : fsm_run(EVENT_TICK)
+FSM -> ORD : orders_any()
+ORD --> FSM : true
+FSM -> ORD : orders_has_order_at(floor=2)
+ORD --> FSM : false
+FSM -> ORD : orders_choose_direction(floor=2, dir=STOP)
+ORD --> FSM : DIRN_DOWN (ordre under)
+
+FSM -> FSM : Overgang → state_moving [EVENT_EXIT → EVENT_ENTRY]
+FSM -> HW : elevio_motorDirection(DIRN_DOWN)
+HW -> SIM : [1, -1, 0, 0]
+
+== Heisen beveger seg fra etasje 2 → 1 ==
+
+loop Kjøring
+    MAIN -> FSM : fsm_run(EVENT_TICK)
+    FSM -> HW : elevio_floorSensor()
+    HW -> SIM : [7, 0, 0, 0]
+    SIM --> HW : [0, 1, etasje, 0]
+    HW --> FSM : etasje (varierer)
+    FSM -> HW : elevio_floorIndicator(etasje)
+    HW -> SIM : [3, etasje, 0, 0]
+    FSM -> ORD : orders_should_stop(etasje, DIRN_DOWN)
+    ORD --> FSM : false (ennå ikke i etasje 1)
+end
+
+note over SIM : Heisen ankommer etasje 1
+
+MAIN -> FSM : fsm_run(EVENT_TICK)
+FSM -> HW : elevio_floorSensor()
+HW --> FSM : floor = 1
+FSM -> ORD : orders_should_stop(1, DIRN_DOWN)
+ORD --> FSM : true
+
+== Dør åpen i etasje 1 ==
+
+FSM -> FSM : Overgang → state_door_open [EVENT_EXIT → EVENT_ENTRY]
+FSM -> HW : elevio_motorDirection(DIRN_STOP)
+HW -> SIM : [1, 0, 0, 0]
+FSM -> HW : elevio_doorOpenLamp(ON)
+HW -> SIM : [4, 1, 0, 0]
+FSM -> ORD : orders_clear_at_floor(1)
+ORD -> HW : elevio_buttonLamp(1, HALL_UP, OFF)
+HW -> SIM : [2, 0, 1, 0]
+FSM -> TMR : timer_start()
+TMR -> TMR : record_start_time()
+
+== Passasjer inne, trykker etasje 4 ==
+
+MAIN -> ORD : orders_poll()
+ORD -> HW : elevio_callButton(CAB, etasje 4)
+HW -> SIM : [6, 2, 4, 0]
+SIM --> HW : [0, 1, 0, 0]
+HW --> ORD : pressed = true
+ORD -> ORD : orders_add(4, BUTTON_CAB)
+ORD -> HW : elevio_buttonLamp(4, CAB, ON)
+HW -> SIM : [2, 2, 4, 1]
+
+loop Venter på timer (3 sek)
+    MAIN -> FSM : fsm_run(EVENT_TICK)
+    FSM -> HW : elevio_obstruction()
+    HW -> SIM : [9, 0, 0, 0]
+    SIM --> HW : [0, 0, 0, 0]
+    HW --> FSM : false (ingen hindring)
+    FSM -> TMR : timer_expired()
+    TMR --> FSM : false (< 3 sek)
+end
+
+== Timer utløper etter 3 sekunder ==
+
+MAIN -> FSM : fsm_run(EVENT_TICK)
+FSM -> TMR : timer_expired()
+TMR --> FSM : true
+FSM -> ORD : orders_any()
+ORD --> FSM : true (etasje 4)
+FSM -> ORD : orders_choose_direction(floor=1, dir=DOWN)
+ORD --> FSM : DIRN_UP (ordre over)
+
+FSM -> HW : elevio_doorOpenLamp(OFF)
+HW -> SIM : [4, 0, 0, 0]
+FSM -> FSM : Overgang → state_moving [EVENT_EXIT → EVENT_ENTRY]
+FSM -> HW : elevio_motorDirection(DIRN_UP)
+HW -> SIM : [1, 1, 0, 0]
+
+== Heisen beveger seg fra etasje 1 → 4 ==
+
+loop Kjøring opp
+    MAIN -> FSM : fsm_run(EVENT_TICK)
+    FSM -> HW : elevio_floorSensor()
+    HW --> FSM : etasje (2, 3...)
+    FSM -> HW : elevio_floorIndicator(etasje)
+    FSM -> ORD : orders_should_stop(etasje, DIRN_UP)
+    ORD --> FSM : false
+end
+
+note over SIM : Heisen ankommer etasje 4
+
+FSM -> ORD : orders_should_stop(4, DIRN_UP)
+ORD --> FSM : true
+
+== Dør åpen i etasje 4, ingen flere ordre ==
+
+FSM -> FSM : Overgang → state_door_open [EVENT_EXIT → EVENT_ENTRY]
+FSM -> HW : elevio_motorDirection(DIRN_STOP)
+FSM -> HW : elevio_doorOpenLamp(ON)
+FSM -> ORD : orders_clear_at_floor(4)
+ORD -> HW : elevio_buttonLamp(4, CAB, OFF)
+FSM -> TMR : timer_start()
+
+loop Venter på timer
+    FSM -> TMR : timer_expired()
+    TMR --> FSM : false
+end
+
+FSM -> TMR : timer_expired()
+TMR --> FSM : true
+FSM -> ORD : orders_any()
+ORD --> FSM : false (ingen ordre)
+
+FSM -> HW : elevio_doorOpenLamp(OFF)
+FSM -> FSM : Overgang → state_idle [EVENT_EXIT → EVENT_ENTRY]
+FSM -> HW : elevio_motorDirection(DIRN_STOP)
+
+note over FSM : Heisen er ledig i etasje 4
+
+@enduml

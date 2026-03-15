@@ -1,0 +1,41 @@
+@startuml state_diagram
+title Heislab - Tilstandsdiagram (State Machine)
+
+[*] --> state_init
+
+state state_init : Initialisering\n--\nBlokker ordre\nKjør motor ned\nVent på etasjesensor
+
+state state_idle : Venter\n--\nMotor stoppet\nScan etter nye ordre
+
+state state_moving : Beveger seg\n--\nMotor på\nOppdater etasjeindikator\nSjekk stoppebetingelse
+
+state state_door_open : Dør åpen\n--\nMotor stoppet\nDørlampe PÅ\nRydd ordre på etasje\nStart 3s timer
+
+state state_stop : Nødstans\n--\nMotor stoppet\nRydd alle ordre\nBlokker nye ordre
+
+state state_error : Feil\n--\nRydd ordre og motor
+
+state_init --> state_idle : Etasjesensor gir gyldig etasje\n[EVENT_TICK]
+
+state_idle --> state_door_open : Ordre på nåværende etasje\n[orders_any() && orders_has_order_at(floor)]
+state_idle --> state_moving : Ordre på annen etasje\n[orders_any()]
+state_idle --> state_stop : Stoppknapp trykket
+
+state_moving --> state_door_open : Stopp-betingelse oppfylt\n[orders_should_stop(floor, dir)]
+state_moving --> state_stop : Stoppknapp trykket
+
+state_door_open --> state_moving : Timer utløpt & ordre finnes\n[timer_expired() && orders_any()]
+state_door_open --> state_idle : Timer utløpt & ingen ordre\n[timer_expired() && !orders_any()]
+state_door_open --> state_stop : Stoppknapp trykket
+state_door_open --> state_door_open : Hindring detektert\n[restart timer]
+
+state_stop --> state_door_open : Stoppknapp sluppet & på etasje\n[!stop_button && at_floor]
+state_stop --> state_idle : Stoppknapp sluppet & mellom etasjer\n[!stop_button && !at_floor]
+
+state_error --> state_init : [EVENT_TICK]
+
+state_idle --> state_error : [EVENT_ERROR]
+state_moving --> state_error : [EVENT_ERROR]
+state_door_open --> state_error : [EVENT_ERROR]
+
+@enduml
