@@ -148,7 +148,6 @@ void state_moving(fsm_events_t event) {
     }
 }
 
-// --- STATE: DOOR_OPEN ---
 void state_door_open(fsm_events_t event) {
     switch (event) {
         case EVENT_ENTRY:
