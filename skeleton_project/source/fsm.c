@@ -242,6 +242,7 @@ void state_error(fsm_events_t event) {
             break;
 
         case EVENT_TICK:
+            fsm_transition(state_init);
             break;
 
         case EVENT_EXIT:

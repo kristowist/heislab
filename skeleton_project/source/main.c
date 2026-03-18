@@ -14,7 +14,7 @@ int main(void) {
         orders_poll();
         fsm_run(EVENT_TICK);
 
-        nanosleep(&(struct timespec){0, 20 * 1000 * 1000}, NULL);
+        nanosleep(&(struct timespec){0, 10 * 1000 * 1000}, NULL);
     }
 
     return 0;

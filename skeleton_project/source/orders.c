@@ -1,4 +1,19 @@
+/*
++--------------------------------- +
+|  >>Date                          |
+|    01.03.26                      |.
+|  >>git pulled by                 |.
+|    Gabriel Sebastian Steeneveldt |.
++--------------------------------- _____
+                                  |aw tysm|
+               ___    ___         |_____ |
+              (@  )__(  @)       /  /
+             /   _______  \     /  /
+            (   (______)   )   /  /
+            \_____________/   /  /
+*/
 #include "orders.h"
+#include <stdbool.h>
 
 
 static int orders[N_FLOORS][N_BUTTONS] = {0};
@@ -53,106 +68,106 @@ void orders_clear_all(void) {
     }
 }
 
-int orders_has_order_at(int floor) {
+bool orders_has_order_at(int floor) {
     if (floor < 0 || floor >= N_FLOORS) {
-        return 0;
+        return false;
     }
 
     for (int b = 0; b < N_BUTTONS; b++) {
         if (orders[floor][b]) {
-            return 1;
+            return true;
         }
     }
-    return 0;
+    return false;
 }
 
-int orders_any(void) {
+bool orders_any(void) {
     for (int f = 0; f < N_FLOORS; f++) {
         if (orders_has_order_at(f)) {
-            return 1;
+            return true;
         }
     }
-    return 0;
+    return false;
 }
 
-int orders_any_above(int floor) {
+bool orders_above(int floor) {
     for (int f = floor + 1; f < N_FLOORS; f++) {
         if (orders_has_order_at(f)) {
-            return 1;
+            return true;
         }
     }
-    return 0;
+    return false;
 }
 
-int orders_any_below(int floor) {
+bool orders_below(int floor) {
     for (int f = 0; f < floor; f++) {
-        if (orders_has_order_at(f)) {
-            return 1;
+            if (orders_has_order_at(f)) {
+                return true;
         }
     }
-    return 0;
+    return false;
 }
 
-int orders_should_stop(int floor, MotorDirection direction) {
+bool orders_should_stop(int floor, MotorDirection direction) {
     if (floor < 0 || floor >= N_FLOORS) {
-        return 0;
+        return false;
     }
 
     if (orders[floor][BUTTON_CAB]) {
-        return 1;
+        return true;
     }
 
     if (direction == DIRN_UP && orders[floor][BUTTON_HALL_UP]) {
-        return 1;
+        return true;
     }
     if (direction == DIRN_DOWN && orders[floor][BUTTON_HALL_DOWN]) {
-        return 1;
+        return true;
     }
 
-    if (direction == DIRN_UP && !orders_any_above(floor)) {
+    if (direction == DIRN_UP && !orders_above(floor)) {
         if (orders[floor][BUTTON_HALL_DOWN]) {
-            return 1;
+            return true;
         }
     }
-    if (direction == DIRN_DOWN && !orders_any_below(floor)) {
+    if (direction == DIRN_DOWN && !orders_below(floor)) {
         if (orders[floor][BUTTON_HALL_UP]) {
-            return 1;
+            return true;
         }
     }
 
     if (floor == 0 || floor == N_FLOORS - 1) {
         if (orders_has_order_at(floor)) {
-            return 1;
+            return true;
         }
     }
 
-    return 0;
+    return false;
 }
 
 MotorDirection orders_choose_direction(int floor, MotorDirection current_direction) {
     if (current_direction == DIRN_UP) {
-        if (orders_any_above(floor)) {
+        if (orders_above(floor)) {
             return DIRN_UP;
         }
-        if (orders_any_below(floor)) {
+        if (orders_below(floor)) {
             return DIRN_DOWN;
         }
     }
 
     if (current_direction == DIRN_DOWN) {
-        if (orders_any_below(floor)) {
+        if (orders_below(floor)) {
             return DIRN_DOWN;
         }
-        if (orders_any_above(floor)) {
+        if (orders_above(floor)) {
             return DIRN_UP;
         }
     }
 
     if (current_direction == DIRN_STOP) {
-        if (orders_any_above(floor)) {
+        if (orders_above(floor)) {
             return DIRN_UP;
         }
-        if (orders_any_below(floor)) {
+        if (orders_below(floor)) {
             return DIRN_DOWN;
         }
     }

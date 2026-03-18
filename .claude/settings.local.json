@@ -1,0 +1,8 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(which plantuml:*)",
+      "Bash(cd \"/Users/gabrielsteeneveldt/Documents/VÅR 2026/Tilpdat/heislab/diagrams\" && python3 render_diagrams.py)"
+    ]
+  }
+}
