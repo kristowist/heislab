@@ -1,0 +1,67 @@
+@startuml sequence_1_init
+title Sekvensdiagram 1/3 - Initialisering og bestilling mottas
+
+participant "main" as MAIN
+participant "orders" as ORD
+participant "fsm" as FSM
+participant "elevio (HAL)" as HW
+participant "Simulator" as SIM
+
+== Initialisering ==
+
+MAIN -> HW : elevio_init()
+HW -> SIM : TCP connect (localhost:15657)
+SIM --> HW : Connected
+HW --> MAIN : OK
+
+MAIN -> ORD : orders_init()
+note right of ORD : Nullstill ordretabell\n[4 etasjer × 3 knapptyper]
+
+MAIN -> FSM : fsm_init()
+FSM -> HW : elevio_floorSensor()
+HW -> SIM : [7, 0, 0, 0]
+SIM --> HW : [0, 1, 2, 0]
+HW --> FSM : floor = 2
+FSM -> FSM : Sett current_floor = 2
+FSM -> FSM : Overgang → state_idle [EVENT_ENTRY]
+FSM -> HW : elevio_motorDirection(DIRN_STOP)
+HW -> SIM : [1, 0, 0, 0]
+
+== Hovedløkke: Ledig (ingen ordre) ==
+
+loop Hvert 10ms
+    MAIN -> ORD : orders_poll()
+    ORD -> HW : elevio_callButton(alle knapper)
+    HW -> SIM : [6, knapp, etasje, 0]
+    SIM --> HW : [0, 0, 0, 0]
+    HW --> ORD : ingen trykk
+
+    MAIN -> FSM : fsm_run(EVENT_TICK)
+    FSM -> ORD : orders_any()
+    ORD --> FSM : false
+end
+
+== Passasjer trykker hall-opp i etasje 1 ==
+
+MAIN -> ORD : orders_poll()
+ORD -> HW : elevio_callButton(HALL_UP, etasje 1)
+HW -> SIM : [6, 0, 1, 0]
+SIM --> HW : [0, 1, 0, 0]
+HW --> ORD : pressed = true
+ORD -> ORD : orders_add(1, BUTTON_HALL_UP)
+ORD -> HW : elevio_buttonLamp(1, HALL_UP, ON)
+HW -> SIM : [2, 0, 1, 1]
+
+MAIN -> FSM : fsm_run(EVENT_TICK)
+FSM -> ORD : orders_any()
+ORD --> FSM : true
+FSM -> ORD : orders_has_order_at(floor=2)
+ORD --> FSM : false
+FSM -> ORD : orders_choose_direction(floor=2, dir=STOP)
+ORD --> FSM : DIRN_DOWN (ordre under)
+
+FSM -> FSM : Overgang → state_moving [EVENT_EXIT → EVENT_ENTRY]
+FSM -> HW : elevio_motorDirection(DIRN_DOWN)
+HW -> SIM : [1, -1, 0, 0]
+
+@enduml

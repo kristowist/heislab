@@ -19,4 +19,7 @@ def render(puml_path: str):
 if __name__ == "__main__":
     render("state_diagram.puml")
     render("sequence_diagram.puml")
+    render("sequence_1_init.puml")
+    render("sequence_2_moving.puml")
+    render("sequence_3_done.puml")
     render("class_diagram.puml")

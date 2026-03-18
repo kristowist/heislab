@@ -1,0 +1,69 @@
+@startuml sequence_2_moving
+title Sekvensdiagram 2/3 - Kjøring til etasje 1, dør åpnes, ny bestilling
+
+participant "main" as MAIN
+participant "orders" as ORD
+participant "fsm" as FSM
+participant "timer" as TMR
+participant "elevio (HAL)" as HW
+participant "Simulator" as SIM
+
+== Heisen kjører ned fra etasje 2 → 1 ==
+
+loop Hvert 10ms under kjøring
+    MAIN -> FSM : fsm_run(EVENT_TICK)
+    FSM -> HW : elevio_floorSensor()
+    HW -> SIM : [7, 0, 0, 0]
+    SIM --> HW : [0, 1, etasje, 0]
+    HW --> FSM : etasje (varierer)
+    FSM -> HW : elevio_floorIndicator(etasje)
+    HW -> SIM : [3, etasje, 0, 0]
+    FSM -> ORD : orders_should_stop(etasje, DIRN_DOWN)
+    ORD --> FSM : false (ennå ikke i etasje 1)
+end
+
+note over SIM : Heisen ankommer etasje 1
+
+MAIN -> FSM : fsm_run(EVENT_TICK)
+FSM -> HW : elevio_floorSensor()
+HW --> FSM : floor = 1
+FSM -> ORD : orders_should_stop(1, DIRN_DOWN)
+ORD --> FSM : true
+
+== Dør åpnes i etasje 1 ==
+
+FSM -> FSM : Overgang → state_door_open [EVENT_EXIT → EVENT_ENTRY]
+FSM -> HW : elevio_motorDirection(DIRN_STOP)
+HW -> SIM : [1, 0, 0, 0]
+FSM -> HW : elevio_doorOpenLamp(ON)
+HW -> SIM : [4, 1, 0, 0]
+FSM -> ORD : orders_clear_at_floor(1)
+ORD -> HW : elevio_buttonLamp(1, HALL_UP, OFF)
+HW -> SIM : [2, 0, 1, 0]
+FSM -> TMR : timer_start()
+TMR -> TMR : record_start_time()
+
+== Passasjer inne - trykker etasje 4 ==
+
+MAIN -> ORD : orders_poll()
+ORD -> HW : elevio_callButton(CAB, etasje 4)
+HW -> SIM : [6, 2, 4, 0]
+SIM --> HW : [0, 1, 0, 0]
+HW --> ORD : pressed = true
+ORD -> ORD : orders_add(4, BUTTON_CAB)
+ORD -> HW : elevio_buttonLamp(4, CAB, ON)
+HW -> SIM : [2, 2, 4, 1]
+
+== Venter på 3-sekunders timer ==
+
+loop Hvert 10ms mens dør er åpen
+    MAIN -> FSM : fsm_run(EVENT_TICK)
+    FSM -> HW : elevio_obstruction()
+    HW -> SIM : [9, 0, 0, 0]
+    SIM --> HW : [0, 0, 0, 0]
+    HW --> FSM : false (ingen hindring)
+    FSM -> TMR : timer_expired()
+    TMR --> FSM : false (< 3 sek)
+end
+
+@enduml

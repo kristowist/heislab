@@ -1,0 +1,74 @@
+@startuml sequence_3_done
+title Sekvensdiagram 3/3 - Timer utløper, kjøring til etasje 4, ferdig
+
+participant "main" as MAIN
+participant "orders" as ORD
+participant "fsm" as FSM
+participant "timer" as TMR
+participant "elevio (HAL)" as HW
+participant "Simulator" as SIM
+
+== Timer utløper etter 3 sekunder ==
+
+MAIN -> FSM : fsm_run(EVENT_TICK)
+FSM -> TMR : timer_expired()
+TMR --> FSM : true
+FSM -> ORD : orders_any()
+ORD --> FSM : true (etasje 4)
+FSM -> ORD : orders_choose_direction(floor=1, dir=DOWN)
+ORD --> FSM : DIRN_UP (ordre over)
+
+FSM -> HW : elevio_doorOpenLamp(OFF)
+HW -> SIM : [4, 0, 0, 0]
+FSM -> FSM : Overgang → state_moving [EVENT_EXIT → EVENT_ENTRY]
+FSM -> HW : elevio_motorDirection(DIRN_UP)
+HW -> SIM : [1, 1, 0, 0]
+
+== Heisen kjører opp fra etasje 1 → 4 ==
+
+loop Hvert 10ms under kjøring
+    MAIN -> FSM : fsm_run(EVENT_TICK)
+    FSM -> HW : elevio_floorSensor()
+    HW --> FSM : etasje (2, 3...)
+    FSM -> HW : elevio_floorIndicator(etasje)
+    HW -> SIM : [3, etasje, 0, 0]
+    FSM -> ORD : orders_should_stop(etasje, DIRN_UP)
+    ORD --> FSM : false
+end
+
+note over SIM : Heisen ankommer etasje 4
+
+FSM -> ORD : orders_should_stop(4, DIRN_UP)
+ORD --> FSM : true
+
+== Dør åpnes i etasje 4 - ingen flere ordre ==
+
+FSM -> FSM : Overgang → state_door_open [EVENT_EXIT → EVENT_ENTRY]
+FSM -> HW : elevio_motorDirection(DIRN_STOP)
+HW -> SIM : [1, 0, 0, 0]
+FSM -> HW : elevio_doorOpenLamp(ON)
+HW -> SIM : [4, 1, 0, 0]
+FSM -> ORD : orders_clear_at_floor(4)
+ORD -> HW : elevio_buttonLamp(4, CAB, OFF)
+HW -> SIM : [2, 2, 4, 0]
+FSM -> TMR : timer_start()
+
+loop Hvert 10ms mens dør er åpen
+    FSM -> TMR : timer_expired()
+    TMR --> FSM : false
+end
+
+FSM -> TMR : timer_expired()
+TMR --> FSM : true
+FSM -> ORD : orders_any()
+ORD --> FSM : false (ingen ordre igjen)
+
+FSM -> HW : elevio_doorOpenLamp(OFF)
+HW -> SIM : [4, 0, 0, 0]
+FSM -> FSM : Overgang → state_idle [EVENT_EXIT → EVENT_ENTRY]
+FSM -> HW : elevio_motorDirection(DIRN_STOP)
+HW -> SIM : [1, 0, 0, 0]
+
+note over FSM : Heisen er ledig i etasje 4
+
+@enduml
